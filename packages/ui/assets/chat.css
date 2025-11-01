@@ -1,0 +1,180 @@
+/* Chat container styles */
+.chat-container {
+  @apply flex flex-col h-full bg-white dark:bg-gray-900;
+}
+
+.chat-messages {
+  @apply flex-1 overflow-y-auto px-4 py-6;
+}
+
+.chat-input-container {
+  @apply border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4;
+}
+
+/* Message styles */
+.message {
+  @apply flex gap-3 p-4 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors;
+}
+
+.user-message {
+  @apply bg-blue-50 dark:bg-blue-900/20;
+}
+
+.ai-message {
+  @apply bg-gray-50 dark:bg-gray-800/50;
+}
+
+.message-avatar {
+  @apply w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-medium flex-shrink-0;
+}
+
+.user-avatar {
+  @apply bg-blue-500;
+}
+
+.ai-avatar {
+  @apply bg-green-500;
+}
+
+.message-content {
+  @apply flex-1 min-w-0;
+}
+
+.message-header {
+  @apply flex items-baseline gap-2 mb-1;
+}
+
+.message-author {
+  @apply text-sm font-medium text-gray-900 dark:text-gray-100;
+}
+
+.message-timestamp {
+  @apply text-xs text-gray-500 dark:text-gray-400;
+}
+
+.message-text {
+  @apply prose prose-sm dark:prose-invert max-w-none;
+}
+
+/* Input styles */
+.chat-input {
+  @apply w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-white placeholder-gray-500 dark:placeholder-gray-400;
+}
+
+.send-button {
+  @apply px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors;
+}
+
+/* Sidebar styles */
+.sidebar {
+  @apply border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 flex flex-col;
+}
+
+.sidebar-expanded {
+  @apply w-80;
+}
+
+.sidebar-collapsed {
+  @apply w-16;
+}
+
+.sidebar-header {
+  @apply p-4 border-b border-gray-200 dark:border-gray-700;
+}
+
+.new-chat-button {
+  @apply w-full px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors flex items-center justify-center gap-2;
+}
+
+.conversation-list {
+  @apply flex-1 overflow-y-auto p-2;
+}
+
+.conversation-item {
+  @apply p-3 rounded-lg cursor-pointer transition-colors;
+}
+
+.conversation-item:hover {
+  @apply hover:bg-gray-100 dark:hover:bg-gray-800;
+}
+
+.conversation-item.active {
+  @apply bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800;
+}
+
+.conversation-title {
+  @apply font-medium text-gray-900 dark:text-gray-100 truncate;
+}
+
+.conversation-last-message {
+  @apply text-sm text-gray-500 dark:text-gray-400 truncate mt-1;
+}
+
+.conversation-timestamp {
+  @apply text-xs text-gray-400 dark:text-gray-500 mt-2;
+}
+
+/* Model selector styles */
+.model-selector {
+  @apply relative;
+}
+
+.model-button {
+  @apply px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors min-w-0;
+}
+
+.model-dropdown {
+  @apply absolute top-full left-0 right-0 mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto;
+}
+
+.model-option {
+  @apply w-full text-left p-3 rounded-lg transition-colors;
+}
+
+.model-option:hover {
+  @apply hover:bg-gray-100 dark:hover:bg-gray-700;
+}
+
+.model-option.active {
+  @apply bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800;
+}
+
+.model-name {
+  @apply font-medium text-gray-900 dark:text-gray-100;
+}
+
+.model-provider {
+  @apply text-sm text-gray-500 dark:text-gray-400;
+}
+
+.model-description {
+  @apply text-xs text-gray-400 dark:text-gray-500 mt-1;
+}
+
+.model-capability {
+  @apply px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 text-xs rounded-full;
+}
+
+/* Loading animation */
+.typing-indicator {
+  @apply flex gap-1 items-center;
+}
+
+.typing-dot {
+  @apply w-2 h-2 bg-gray-400 rounded-full animate-bounce;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .sidebar-expanded {
+    @apply w-64;
+  }
+  
+  .chat-messages {
+    @apply px-2 py-4;
+  }
+  
+  .message {
+    @apply p-2;
+  }
+}
