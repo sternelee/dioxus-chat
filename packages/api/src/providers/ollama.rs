@@ -126,45 +126,32 @@ impl OllamaProvider {
         let mut content = String::new();
         let mut images = Vec::new();
 
-        for msg_content in &message.content {
-            match msg_content {
-                MessageContent::Text { text } => {
-                    content.push_str(text);
-                }
-                MessageContent::ImageUrl { url } => {
-                    if url.starts_with("data:image/") {
-                        if let Some(base64_data) = self.extract_base64_from_url(url) {
-                            images.push(base64_data);
-                        }
+        match &message.content {
+            MessageContent::Text { text } => {
+                content.push_str(text);
+            }
+            MessageContent::ToolRequest {
+                name, arguments, ..
+            } => {
+                // For Ollama, we include tool requests as text content
+                let tool_json = json!({
+                    "tool_call": {
+                        "name": name,
+                        "arguments": arguments
+                    }
+                });
+                content.push_str(&format!("Tool call: {}", tool_json));
+            }
+            MessageContent::ToolResponse { result, .. } => {
+                // Include tool results as text content
+                content.push_str(&format!("Tool result: {}", result));
+            }
+            MessageContent::Image { url, .. } => {
+                if url.starts_with("data:image/") {
+                    if let Some(base64_data) = self.extract_base64_from_url(url) {
+                        images.push(base64_data);
                     }
                 }
-                MessageContent::Image {
-                    content: img_content,
-                    ..
-                } => {
-                    images.push(img_content.clone());
-                }
-                MessageContent::ToolRequest {
-                    name, arguments, ..
-                } => {
-                    // For Ollama, we include tool requests as text content
-                    let tool_json = json!({
-                        "tool_call": {
-                            "name": name,
-                            "arguments": arguments
-                        }
-                    });
-                    content.push_str(&format!("Tool call: {}", tool_json));
-                }
-                MessageContent::ToolResponse { result, .. } => {
-                    // Include tool results as text content
-                    let result_text = match result {
-                        Ok(messages) => messages.join("\n"),
-                        Err(e) => e.to_string(),
-                    };
-                    content.push_str(&format!("Tool result: {}", result_text));
-                }
-                _ => {}
             }
         }
 
@@ -237,6 +224,8 @@ impl OllamaProvider {
                 None
             },
             tool_calls,
+            tool_results: None,
+            reasoning_content: None,
         }
     }
 
@@ -448,7 +437,7 @@ impl Provider for OllamaProvider {
         };
 
         let mut ollama_request = OllamaRequest {
-            model: self.model_config.model.clone(),
+            model: self.model_config.id.clone(),
             messages,
             stream: false,
             options: options_param,
@@ -514,7 +503,7 @@ impl Provider for OllamaProvider {
         };
 
         let mut ollama_request = OllamaRequest {
-            model: self.model_config.model.clone(),
+            model: self.model_config.id.clone(),
             messages,
             stream: true,
             options: options_param,

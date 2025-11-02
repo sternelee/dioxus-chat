@@ -99,7 +99,13 @@ pub fn ThreadList(props: ThreadListProps) -> Element {
                         onclick: move |_| props.on_new_thread.call(()),
                         class: "w-full justify-start gap-2",
                         variant: ButtonVariant::Primary,
-                        "+ {if props.search_term.is_some() { " New Chat " } else { "New Chat " }}"
+                        {
+    if props.search_term.is_some() {
+                        "+ New Chat "
+                    } else {
+                        "+ New Chat"
+                    }
+                }
                     }
 
                     // Search input
@@ -339,7 +345,13 @@ fn ThreadItem(
                         variant: ButtonVariant::Ghost,
                         size: "sm",
                         title: if thread.favorite { "Remove from favorites" } else { "Add to favorites" },
-                        "{if thread.favorite { '⭐' } else { '☆' }}"
+                        {
+                            if thread.favorite {
+                                "⭐"
+                            } else {
+                                "☆"
+                            }
+                        }
                     }
 
                     // More options dropdown
@@ -364,7 +376,13 @@ fn ThreadItem(
                                     on_toggle_favorite.call(thread.id.clone());
                                     show_dropdown.set(false);
                                 },
-                                "{if thread.favorite { 'Remove from favorites' } else { 'Add to favorites' }}"
+                                {
+                            if thread.favorite {
+                                "Remove from favorites"
+                            } else {
+                                "Add to favorites"
+                            }
+                        }
                             }
                             DropdownMenuItem::<String> {
                                 value: "rename".to_string(),

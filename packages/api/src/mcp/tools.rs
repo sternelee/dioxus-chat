@@ -13,7 +13,7 @@ pub fn create_builtin_tools() -> Vec<ChatTool> {
             name: "shell".to_string(),
             description: "Execute shell commands. Use with caution and only when necessary."
                 .to_string(),
-            parameters: serde_json::json!({
+            input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "command": {
@@ -27,11 +27,12 @@ pub fn create_builtin_tools() -> Vec<ChatTool> {
                 },
                 "required": ["command"]
             }),
+            is_mcp: false,
         },
         ChatTool {
             name: "file_editor".to_string(),
             description: "Read, write, edit, and search files on the filesystem".to_string(),
-            parameters: serde_json::json!({
+            input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "operation": {
@@ -58,11 +59,12 @@ pub fn create_builtin_tools() -> Vec<ChatTool> {
                 },
                 "required": ["operation", "path"]
             }),
+            is_mcp: false,
         },
         ChatTool {
             name: "web_search".to_string(),
             description: "Search the web for information".to_string(),
-            parameters: serde_json::json!({
+            input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "query": {
@@ -77,11 +79,12 @@ pub fn create_builtin_tools() -> Vec<ChatTool> {
                 },
                 "required": ["query"]
             }),
+            is_mcp: false,
         },
         ChatTool {
             name: "analyze_code".to_string(),
             description: "Analyze and understand code files".to_string(),
-            parameters: serde_json::json!({
+            input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "file_path": {
@@ -96,11 +99,12 @@ pub fn create_builtin_tools() -> Vec<ChatTool> {
                 },
                 "required": ["file_path"]
             }),
+            is_mcp: false,
         },
         ChatTool {
             name: "system_info".to_string(),
             description: "Get system information and status".to_string(),
-            parameters: serde_json::json!({
+            input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "info_type": {
@@ -111,6 +115,7 @@ pub fn create_builtin_tools() -> Vec<ChatTool> {
                 },
                 "required": ["info_type"]
             }),
+            is_mcp: false,
         },
     ]
 }

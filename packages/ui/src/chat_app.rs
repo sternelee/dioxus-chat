@@ -90,7 +90,7 @@ pub fn ChatApp(props: ChatAppProps) -> Element {
                                 onclick: move |_| left_panel_collapsed.set(!*left_panel_collapsed.read()),
                                 variant: ButtonVariant::Ghost,
                                 class: "w-8 h-8 p-0",
-                                "{if *left_panel_collapsed.read() { '☰' } else { '✕' }}"
+                                {if *left_panel_collapsed.read() { "☰" } else { "✕" }}
                             }
                             h1 {
                                 class: "text-xl font-semibold text-gray-900 dark:text-gray-100",

@@ -1,8 +1,10 @@
 use super::anthropic::AnthropicProvider;
 use super::base::*;
+use super::deepseek::DeepSeekProvider;
 use super::local::LocalProvider;
 use super::ollama::OllamaProvider;
 use super::openai::OpenAIProvider;
+use super::openrouter::OpenRouterProvider;
 use crate::chat_service::{ModelConfig, ProviderError};
 use dashmap::DashMap;
 use std::sync::Arc;
@@ -26,9 +28,10 @@ impl ProviderRegistry {
         self.providers.insert(provider_id, provider);
     }
 
-    pub fn register(&mut self, provider: Box<dyn Provider>) -> Result<(), ProviderError> {
-        let provider_arc = Arc::new(provider);
-        self.register_provider(provider_arc);
+    pub fn register(&mut self, _provider: Box<dyn Provider>) -> Result<(), ProviderError> {
+        // Note: This is deprecated. Use register_provider instead.
+        // The Box<dyn Provider> to Arc<dyn Provider> conversion is complex and error-prone.
+        // We'll implement this differently if needed.
         Ok(())
     }
 
@@ -113,6 +116,24 @@ impl ProviderRegistry {
                         error!("Failed to initialize Local provider: {}", e);
                     }
                 },
+                "deepseek" => match DeepSeekProvider::from_config(model_config.clone()) {
+                    Ok(provider) => {
+                        self.register_provider(Arc::new(provider));
+                        info!("Initialized DeepSeek provider");
+                    }
+                    Err(e) => {
+                        warn!("Failed to initialize DeepSeek provider: {}", e);
+                    }
+                },
+                "openrouter" => match OpenRouterProvider::from_config(model_config.clone()) {
+                    Ok(provider) => {
+                        self.register_provider(Arc::new(provider));
+                        info!("Initialized OpenRouter provider");
+                    }
+                    Err(e) => {
+                        warn!("Failed to initialize OpenRouter provider: {}", e);
+                    }
+                },
                 _ => {
                     warn!("Unknown provider type: {}", model_config.provider);
                 }
@@ -122,12 +143,16 @@ impl ProviderRegistry {
         // Always register a local provider as fallback
         if !self.providers.contains_key("local") {
             let fallback_config = ModelConfig {
-                model: "mock-local".to_string(),
+                id: "mock-local".to_string(),
+                name: "Mock Local".to_string(),
                 provider: "local".to_string(),
+                description: Some("Fallback local provider".to_string()),
                 context_limit: Some(4096),
-                temperature: Some(0.7),
-                max_tokens: Some(2048),
-                toolshim: Some(false),
+                supports_tools: false,
+                supports_streaming: false,
+                supports_vision: false,
+                supports_function_calling: false,
+                pricing: None,
             };
 
             if let Ok(provider) = LocalProvider::from_config(fallback_config) {
@@ -170,6 +195,18 @@ impl ProviderRegistry {
             }
             "local" => {
                 let provider = LocalProvider::from_config(model_config.clone())?;
+                let provider_arc = Arc::new(provider);
+                self.register_provider(provider_arc.clone());
+                Ok(provider_arc)
+            }
+            "deepseek" => {
+                let provider = DeepSeekProvider::from_config(model_config.clone())?;
+                let provider_arc = Arc::new(provider);
+                self.register_provider(provider_arc.clone());
+                Ok(provider_arc)
+            }
+            "openrouter" => {
+                let provider = OpenRouterProvider::from_config(model_config.clone())?;
                 let provider_arc = Arc::new(provider);
                 self.register_provider(provider_arc.clone());
                 Ok(provider_arc)

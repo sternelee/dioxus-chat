@@ -98,7 +98,8 @@ impl StdioMcpClient {
         ChatTool {
             name: mcp_tool.name,
             description: mcp_tool.description,
-            parameters: mcp_tool.input_schema,
+            input_schema: mcp_tool.input_schema,
+            is_mcp: true,
         }
     }
 }
@@ -229,7 +230,8 @@ impl McpToolExecutor {
                         all_tools.push(ChatTool {
                             name: format!("{}:{}", client_name, tool.name),
                             description: format!("{} - {}", tool.description, client_name),
-                            parameters: tool.input_schema,
+                            input_schema: tool.input_schema,
+                            is_mcp: true,
                         });
                     }
                 }
@@ -319,7 +321,7 @@ impl McpToolExecutor {
                 chat_tools.into_iter().map(|ct| crate::chat_service::Tool {
                     name: ct.name,
                     description: ct.description,
-                    input_schema: ct.parameters,
+                    input_schema: ct.input_schema,
                     is_mcp: true,
                 }).collect()
             },

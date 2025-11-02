@@ -388,7 +388,7 @@ fn AssistantMessage(
                             class: "text-xs",
                             variant: ButtonVariant::Ghost,
                             size: "sm",
-                            "{if copied { '✓ Copied' } else { '📋 Copy' }}"
+                            {if copied { "✓ Copied" } else { "📋 Copy" }}
                         }
 
                         DropdownMenu {
