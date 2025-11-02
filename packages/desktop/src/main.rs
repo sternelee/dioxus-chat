@@ -1,9 +1,12 @@
 use dioxus::prelude::*;
 
-use ui::{Navbar, ChatContainer, ChatMessage, Sidebar, ConversationItem, ModelSelector, Model};
-use views::{Blog, Home, Chat};
+// Basic HTML components only - no complex UI dependencies
+use views::{Blog, Home, SimpleGoose};
+use views::chat_simple::SimpleChat as Chat;
 
 mod views;
+mod storage;
+// mod agent; // Temporarily disabled to avoid compilation errors
 
 #[derive(Debug, Clone, Routable, PartialEq)]
 #[rustfmt::skip]
@@ -15,6 +18,8 @@ enum Route {
     Blog { id: i32 },
     #[route("/chat")]
     Chat {},
+    #[route("/goose")]
+    SimpleGoose {},
 }
 
 const MAIN_CSS: Asset = asset!("/assets/main.css");
@@ -37,23 +42,35 @@ fn App() -> Element {
     }
 }
 
-/// A desktop-specific Router around the shared `Navbar` component
+/// A desktop-specific Router around a simple navbar
 /// which allows us to use the desktop-specific `Route` enum.
 #[component]
 fn DesktopNavbar() -> Element {
     rsx! {
-        Navbar {
-            Link {
-                to: Route::Home {},
-                "Home"
-            }
-            Link {
-                to: Route::Chat {},
-                "Chat"
-            }
-            Link {
-                to: Route::Blog { id: 1 },
-                "Blog"
+        nav {
+            class: "bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4",
+            div {
+                class: "flex items-center gap-6",
+                Link {
+                    to: Route::Home {},
+                    class: "text-gray-700 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-400 font-medium",
+                    "Home"
+                }
+                Link {
+                    to: Route::Chat {},
+                    class: "text-gray-700 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-400 font-medium",
+                    "Chat"
+                }
+                Link {
+                    to: Route::Blog { id: 1 },
+                    class: "text-gray-700 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-400 font-medium",
+                    "Blog"
+                }
+                Link {
+                    to: Route::SimpleGoose {},
+                    class: "text-gray-700 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-400 font-medium",
+                    "Goose Chat"
+                }
             }
         }
 
