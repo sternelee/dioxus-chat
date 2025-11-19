@@ -1,7 +1,7 @@
 // Agent Configuration UI Components
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
-use api::{AgentConfig, GooseMode, Tool, RigAgentService};
+use api::{AgentConfig, GooseMode, Tool};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AgentConfigState {

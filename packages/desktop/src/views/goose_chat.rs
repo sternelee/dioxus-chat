@@ -5,9 +5,9 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::agent::{
-    Agent, AgentEvent, Conversation, AgentFactory, ExtensionContext, UiChatMessage, MessageContent,
+    Agent, AgentEvent, Conversation, AgentFactory, UiChatMessage, MessageContent,
+    EnhancedStreamChunk, ChunkType,
 };
-use api::{ChatProvider, ProviderFactory, Role};
 
 /// State for the Goose Chat component
 #[derive(Clone)]
@@ -28,15 +28,11 @@ impl Default for GooseChatState {
         Self {
             agent: Arc::new(RwLock::new(
                 async_std::task::block_on(async {
-                    AgentFactory::create_default_agent(
-                        ProviderFactory::create_default_provider()
-                            .await
-                            .unwrap_or_else(|_| {
-                                Arc::new(api::ChatService::new()?) as Arc<dyn ChatProvider>
-                            })
-                    )
-                    .await
-                    .unwrap()
+                    AgentFactory::create_default_agent()
+                        .await
+                        .unwrap_or_else(|_| {
+                            panic!("Failed to create default agent")
+                        })
                 })
             )),
             conversation: None,
@@ -44,7 +40,7 @@ impl Default for GooseChatState {
             is_loading: false,
             current_input: String::new(),
             error: None,
-            selected_model: "default".to_string(),
+            selected_model: "mock-local".to_string(),
             agent_mode: "chat".to_string(),
         }
     }
@@ -95,10 +91,9 @@ pub fn GooseChat() -> Element {
     }
 }
 
-/// Initialize the agent with proper provider
+/// Initialize the agent with rig integration
 async fn initialize_agent(state: &mut GooseChatState) -> anyhow::Result<()> {
-    let provider = ProviderFactory::create_default_provider().await?;
-    let agent = AgentFactory::create_default_agent(provider).await?;
+    let agent = AgentFactory::create_default_agent().await?;
     state.agent = Arc::new(RwLock::new(agent));
     Ok(())
 }
@@ -185,17 +180,19 @@ fn ChatHeader(state: Signal<GooseChatState>) -> Element {
                         option { value: "tool", "Tool Mode" }
                     }
 
-                    // Model selector (simplified)
+                    // Model selector
                     select {
                         class: "px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100",
                         value: "{state.read().selected_model}",
                         onchange: move |evt| {
                             state.write().selected_model = evt.value.clone();
                         },
-                        option { value: "default", "Default Model" }
-                        option { value: "deepseek-r1", "DeepSeek R1" }
-                        option { value: "gpt-4", "GPT-4" }
-                        option { value: "claude", "Claude" }
+                        option { value: "mock-local", "Mock Local" }
+                        option { value: "deepseek-chat", "DeepSeek Chat" }
+                        option { value: "deepseek-r1-distill-llama-70b", "DeepSeek R1" }
+                        option { value: "openai/gpt-4o", "GPT-4o" }
+                        option { value: "anthropic/claude-3.5-sonnet", "Claude 3.5 Sonnet" }
+                        option { value: "google/gemini-1.5-pro", "Gemini 1.5 Pro" }
                     }
                 }
 
@@ -420,11 +417,10 @@ async fn switch_agent_mode(
     state: Signal<GooseChatState>,
     mode: String,
 ) -> anyhow::Result<()> {
-    let provider = ProviderFactory::create_default_provider().await?;
     let agent = match mode.as_str() {
-        "reasoning" => AgentFactory::create_reasoning_agent(provider).await?,
-        "tool" => AgentFactory::create_tool_agent(provider).await?,
-        _ => AgentFactory::create_default_agent(provider).await?,
+        "reasoning" => AgentFactory::create_reasoning_agent().await?,
+        "tool" => AgentFactory::create_tool_agent().await?,
+        _ => AgentFactory::create_default_agent().await?,
     };
 
     state.write().agent = Arc::new(RwLock::new(agent));

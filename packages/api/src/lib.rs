@@ -2,9 +2,9 @@
 use dioxus::prelude::*;
 
 // Include chat service modules
+pub mod agent_builder;
 pub mod chat_service_simple;
 pub mod rig_agent_service;
-pub mod agent_builder;
 pub mod streaming_service;
 
 // Temporarily comment out advanced modules that have compilation issues
@@ -16,14 +16,16 @@ pub mod streaming_service;
 // Export types from chat_service_simple for backward compatibility
 pub use chat_service_simple::{
     AgentConfig, ChatMessage, ChatRequest, ChatResponse, GooseMode, Message, MessageContent,
-    MessageMetadata, ModelConfig, Role, SimpleChatService as ChatService, TokenUsage, Tool,
-    ToolCall, ToolResult, StreamChunk, ModelPricing, ProviderError,
+    MessageMetadata, ModelConfig, ModelPricing, ProviderError, Role,
+    SimpleChatService as ChatService, StreamChunk, TokenUsage, Tool, ToolCall, ToolResult,
 };
 
 // Export new rig-based agent services
-pub use rig_agent_service::{RigAgentService, RigModelConfig, CustomTool};
-pub use agent_builder::{RigAgentBuilder, AgentBuilderConfig, AgentFactory, ToolRegistry};
-pub use streaming_service::{StreamingAgentService, StreamingConfig, EnhancedStreamChunk, ChunkType, StreamMetadata};
+pub use agent_builder::{AgentBuilderConfig, AgentFactory, RigAgentBuilder, ToolRegistry};
+pub use rig_agent_service::{CustomTool, RigAgentService, RigModelConfig};
+pub use streaming_service::{
+    ChunkType, EnhancedStreamChunk, StreamMetadata, StreamingAgentService, StreamingConfig,
+};
 
 // Temporarily comment out advanced feature exports to focus on core functionality
 // pub use mcp_tools::{McpToolRegistry, McpServerConfig, McpClient, EnhancedRigAgentService as MCPEnabledAgentService};
@@ -294,10 +296,10 @@ pub async fn send_message_enhanced_stream(request: ChatRequest) -> Result<String
                 if let Some(content) = chunk.base.content {
                     full_content.push_str(&content);
                 }
-            },
+            }
             ChunkType::Metadata => {
                 metadata_chunks.push(chunk);
-            },
+            }
             _ => {}
         }
     }

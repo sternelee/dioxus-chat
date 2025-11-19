@@ -1,9 +1,9 @@
 // Simplified ChatService implementation for immediate integration
 use anyhow::Result;
 use chrono::{DateTime, Utc};
+use futures::stream::{self, Stream, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use futures::stream::{self, Stream, StreamExt};
 use std::time::Duration;
 use tokio::time::sleep;
 
@@ -260,7 +260,9 @@ impl SimpleChatService {
                 id: "deepseek-r1-distill-llama-70b".to_string(),
                 name: "DeepSeek R1 Distill Llama 70B".to_string(),
                 provider: "deepseek".to_string(),
-                description: Some("DeepSeek's reasoning model with thinking capabilities".to_string()),
+                description: Some(
+                    "DeepSeek's reasoning model with thinking capabilities".to_string(),
+                ),
                 context_limit: Some(64000),
                 supports_tools: true,
                 supports_streaming: true,
@@ -358,14 +360,19 @@ impl SimpleChatService {
             .unwrap_or_default();
 
         // Generate response with thinking content if applicable
-        let (thinking_content, response_content) = if model_id.contains("r1") || model_id.contains("reasoning") {
+        let (thinking_content, response_content) = if model_id.contains("r1")
+            || model_id.contains("reasoning")
+        {
             // Generate thinking content for reasoning models
             let thinking = format!("Let me think about this step by step:\n\n1. First, I need to understand what the user is asking about.\n2. The user's message is: \"{}\"\n3. I should provide a thoughtful and comprehensive response.\n4. I'll structure my answer to be clear and helpful.\n\nBased on this analysis, I'll now provide my response.", last_user_message);
 
             let response = self.generate_standard_response(&last_user_message, &model_id);
             (Some(thinking), response)
         } else {
-            (None, self.generate_standard_response(&last_user_message, &model_id))
+            (
+                None,
+                self.generate_standard_response(&last_user_message, &model_id),
+            )
         };
 
         // Calculate mock token usage
@@ -400,7 +407,9 @@ impl SimpleChatService {
 
     fn generate_response(&self, user_message: &str, model_id: &str) -> String {
         // Add thinking content for reasoning models
-        let (thinking_content, response_content) = if model_id.contains("r1") || model_id.contains("reasoning") {
+        let (thinking_content, response_content) = if model_id.contains("r1")
+            || model_id.contains("reasoning")
+        {
             // Generate thinking content for reasoning models
             let thinking = format!("Let me think about this step by step:\n\n1. First, I need to understand what the user is asking about.\n2. The user's message is: \"{}\"\n3. I should provide a thoughtful and comprehensive response.\n4. I'll structure my answer to be clear and helpful.\n\nBased on this analysis, I'll now provide my response.", user_message);
 
@@ -424,12 +433,18 @@ impl SimpleChatService {
 
             (Some(thinking), response.to_string())
         } else {
-            (None, self.generate_standard_response(user_message, model_id))
+            (
+                None,
+                self.generate_standard_response(user_message, model_id),
+            )
         };
 
         // Combine thinking and response
         match thinking_content {
-            Some(thinking) => format!("🧠 **Thinking Process:**\n{}\n\n**Response:**\n{}", thinking, response_content),
+            Some(thinking) => format!(
+                "🧠 **Thinking Process:**\n{}\n\n**Response:**\n{}",
+                thinking, response_content
+            ),
             None => response_content,
         }
     }
@@ -453,7 +468,7 @@ impl SimpleChatService {
                 } else {
                     format!("I understand you're asking about '{}'. I'll provide you with a helpful and accurate response based on my training. Could you clarify what specific aspect you'd like me to focus on?", user_message)
                 }
-            },
+            }
             "anthropic/claude-3.5-sonnet" => {
                 if lower_message.contains("hello") {
                     "Hello! I'm Claude 3.5 Sonnet, Anthropic's most intelligent model. I excel at nuanced reasoning, complex analysis, and thoughtful communication. I can help with writing, analysis, coding, creative tasks, and in-depth conversation. What would you like to explore?".to_string()
@@ -466,7 +481,7 @@ impl SimpleChatService {
                 } else {
                     format!("I see you're interested in '{}'. I'd be happy to provide a thoughtful analysis or assistance with this topic. Is there a particular aspect you'd like me to explore in depth, or do you have specific questions I can help address?", user_message)
                 }
-            },
+            }
             "openai/gpt-4o" => {
                 if lower_message.contains("hello") {
                     "Hello! I'm GPT-4o, OpenAI's flagship multimodal model. I can understand text, images, and audio while providing intelligent responses across a wide range of tasks. How can I assist you today?".to_string()
@@ -479,7 +494,7 @@ impl SimpleChatService {
                 } else {
                     format!("I understand you're asking about '{}'. As GPT-4o, I can provide intelligent responses and, if relevant, analyze any visual content you share. What specific aspect would you like me to focus on?", user_message)
                 }
-            },
+            }
             "google/gemini-1.5-pro" => {
                 if lower_message.contains("hello") {
                     "Hello! I'm Gemini 1.5 Pro, Google's advanced multimodal model with a massive context window. I can handle long documents, complex reasoning, and provide thoughtful analysis across many topics. How can I assist you today?".to_string()
@@ -492,8 +507,9 @@ impl SimpleChatService {
                 } else {
                     format!("I see you're interested in '{}'. I'm well-equipped to provide detailed analysis and maintain context over complex discussions. What specific aspect would you like me to explore in depth?", user_message)
                 }
-            },
-            _ => { // Default model
+            }
+            _ => {
+                // Default model
                 if lower_message.contains("hello") {
                     "Hello! I'm a mock AI assistant. How can I help you today? I can demonstrate various capabilities including text generation, question answering, and basic conversation skills.".to_string()
                 } else if lower_message.contains("code") {
@@ -512,7 +528,10 @@ impl SimpleChatService {
     }
 
     /// Send a message with streaming response
-    pub async fn send_message_stream(&self, request: ChatRequest) -> Result<impl Stream<Item = StreamChunk>> {
+    pub async fn send_message_stream(
+        &self,
+        request: ChatRequest,
+    ) -> Result<impl Stream<Item = StreamChunk>> {
         let model_id = if request.model.is_empty() {
             self.default_model
                 .as_ref()
@@ -535,7 +554,10 @@ impl SimpleChatService {
         let full_response = self.generate_response(&last_user_message, &model_id);
 
         // Split into words for streaming effect
-        let words: Vec<String> = full_response.split_whitespace().map(|s| s.to_string()).collect();
+        let words: Vec<String> = full_response
+            .split_whitespace()
+            .map(|s| s.to_string())
+            .collect();
         let words_len = words.len();
         let model_id_clone = model_id.clone();
 
@@ -548,7 +570,11 @@ impl SimpleChatService {
                     delta: Some(format!("{} ", word)),
                     token_usage: None,
                     model: model_id_clone.clone(),
-                    finish_reason: if is_complete { Some("stop".to_string()) } else { None },
+                    finish_reason: if is_complete {
+                        Some("stop".to_string())
+                    } else {
+                        None
+                    },
                     is_complete,
                 };
                 async move {
@@ -563,13 +589,15 @@ impl SimpleChatService {
     }
 
     /// Send a message with streaming response using Server-Sent Events format
-    pub async fn send_message_sse(&self, request: ChatRequest) -> Result<impl Stream<Item = String>> {
+    pub async fn send_message_sse(
+        &self,
+        request: ChatRequest,
+    ) -> Result<impl Stream<Item = String>> {
         let stream = self.send_message_stream(request).await?;
 
-        let sse_stream = stream.map(|chunk| {
-            serde_json::to_string(&chunk).unwrap_or_default()
-        });
+        let sse_stream = stream.map(|chunk| serde_json::to_string(&chunk).unwrap_or_default());
 
         Ok(sse_stream)
     }
 }
+

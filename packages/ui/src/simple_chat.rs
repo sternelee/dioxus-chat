@@ -118,7 +118,7 @@ pub fn SimpleChatContainer(
                         value: "{message_input}",
                         oninput: move |evt: dioxus::prelude::Event<dioxus::prelude::FormData>| message_input.set(evt.value()),
                         onkeydown: move |evt: KeyboardEvent| {
-                            if evt.key() == Key::Enter && !evt.modifiers().contains(KeyModifiers::SHIFT) {
+                            if evt.key() == Key::Enter && !evt.modifiers().contains(Modifiers::SHIFT) {
                                 evt.prevent_default();
                                 let content = message_input.read().clone();
                                 if !content.trim().is_empty() {

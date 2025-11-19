@@ -57,7 +57,10 @@ pub trait AgentExtension: Send + Sync {
 
     /// Get execution phase(s) this extension participates in
     fn phases(&self) -> Vec<ExtensionPhase> {
-        vec![ExtensionPhase::PreProcessing, ExtensionPhase::PostProcessing]
+        vec![
+            ExtensionPhase::PreProcessing,
+            ExtensionPhase::PostProcessing,
+        ]
     }
 
     /// Initialize extension with context
@@ -157,8 +160,11 @@ impl ExtensionManager {
         let mut current_input = input;
 
         for (name, extension) in extensions.iter() {
-            if extension.phases().contains(&phase) &&
-               extension.should_execute(phase, context, &current_input).await {
+            if extension.phases().contains(&phase)
+                && extension
+                    .should_execute(phase, context, &current_input)
+                    .await
+            {
                 match extension.execute(phase, context, &current_input).await {
                     Ok(result) => {
                         // Update input for next extension if data is provided
@@ -166,7 +172,7 @@ impl ExtensionManager {
                             current_input = data.clone();
                         }
                         results.push(result);
-                    },
+                    }
                     Err(e) => {
                         let error_result = ExtensionResult {
                             success: false,
@@ -265,7 +271,10 @@ impl AgentExtension for ConversationSummarizerExtension {
     }
 
     fn phases(&self) -> Vec<ExtensionPhase> {
-        vec![ExtensionPhase::PreProcessing, ExtensionPhase::PostProcessing]
+        vec![
+            ExtensionPhase::PreProcessing,
+            ExtensionPhase::PostProcessing,
+        ]
     }
 
     async fn execute(
@@ -292,7 +301,7 @@ impl AgentExtension for ConversationSummarizerExtension {
                         });
                     }
                 }
-            },
+            }
             ExtensionPhase::PostProcessing => {
                 // Post-process response with context
                 return Ok(ExtensionResult {
@@ -305,7 +314,7 @@ impl AgentExtension for ConversationSummarizerExtension {
                     metadata: HashMap::new(),
                     next_actions: Vec::new(),
                 });
-            },
+            }
             _ => {}
         }
 
@@ -328,7 +337,7 @@ impl AgentExtension for ConversationSummarizerExtension {
             ExtensionPhase::PreProcessing => {
                 // Only execute in preprocessing if we have messages
                 input.get("messages").is_some()
-            },
+            }
             _ => true,
         }
     }
@@ -425,7 +434,7 @@ impl AgentExtension for ToolUsageMonitorExtension {
                         }
                     }
                 }
-            },
+            }
             ExtensionPhase::PostProcessing => {
                 // Return usage statistics
                 let tool_usage = self.tool_usage.read().await;
@@ -441,7 +450,7 @@ impl AgentExtension for ToolUsageMonitorExtension {
                     metadata: HashMap::new(),
                     next_actions: Vec::new(),
                 });
-            },
+            }
             _ => {}
         }
 
@@ -526,12 +535,16 @@ impl AgentExtension for SafetyFilterExtension {
                     return Ok(ExtensionResult {
                         success: false,
                         data: None,
-                        error: Some(format!("Message too long: {} > {}", input_str.len(), self.max_message_length)),
+                        error: Some(format!(
+                            "Message too long: {} > {}",
+                            input_str.len(),
+                            self.max_message_length
+                        )),
                         metadata: HashMap::new(),
                         next_actions: vec!["shorten_message".to_string()],
                     });
                 }
-            },
+            }
             ExtensionPhase::PostProcessing => {
                 // Filter output if needed
                 return Ok(ExtensionResult {
@@ -544,7 +557,7 @@ impl AgentExtension for SafetyFilterExtension {
                     metadata: HashMap::new(),
                     next_actions: Vec::new(),
                 });
-            },
+            }
             _ => {}
         }
 
@@ -581,15 +594,21 @@ impl ExtendedRigAgentService {
     async fn register_default_extensions(&mut self) -> Result<()> {
         // Conversation summarizer
         let summarizer = ConversationSummarizerExtension::new(500, 20);
-        self.extension_manager.register_extension(Box::new(summarizer)).await?;
+        self.extension_manager
+            .register_extension(Box::new(summarizer))
+            .await?;
 
         // Tool usage monitor
         let monitor = ToolUsageMonitorExtension::new(100);
-        self.extension_manager.register_extension(Box::new(monitor)).await?;
+        self.extension_manager
+            .register_extension(Box::new(monitor))
+            .await?;
 
         // Safety filter
         let safety_filter = SafetyFilterExtension::new();
-        self.extension_manager.register_extension(Box::new(safety_filter)).await?;
+        self.extension_manager
+            .register_extension(Box::new(safety_filter))
+            .await?;
 
         Ok(())
     }
@@ -617,20 +636,30 @@ impl ExtendedRigAgentService {
 
         // Pre-processing phase
         let request_json = json!(request);
-        let (processed_request, _) = self.extension_manager
-            .execute_phase(crate::agent_extensions::ExtensionPhase::PreProcessing, &ext_context, request_json)
+        let (processed_request, _) = self
+            .extension_manager
+            .execute_phase(
+                crate::agent_extensions::ExtensionPhase::PreProcessing,
+                &ext_context,
+                request_json,
+            )
             .await?;
 
-        let processed_request: ChatRequest = serde_json::from_value(processed_request)
-            .unwrap_or(request);
+        let processed_request: ChatRequest =
+            serde_json::from_value(processed_request).unwrap_or(request);
 
         // Send message through base service
         let mut response = self.base_service.send_message(processed_request).await?;
 
         // Post-processing phase
         let response_json = json!(response);
-        let (_, _) = self.extension_manager
-            .execute_phase(crate::agent_extensions::ExtensionPhase::PostProcessing, &ext_context, response_json)
+        let (_, _) = self
+            .extension_manager
+            .execute_phase(
+                crate::agent_extensions::ExtensionPhase::PostProcessing,
+                &ext_context,
+                response_json,
+            )
             .await?;
 
         Ok(response)
@@ -648,7 +677,9 @@ impl ExtendedRigAgentService {
 
     /// Configure an extension
     pub async fn configure_extension(&self, name: &str, config: serde_json::Value) -> Result<()> {
-        self.extension_manager.configure_extension(name, config).await
+        self.extension_manager
+            .configure_extension(name, config)
+            .await
     }
 
     /// Get extension info
@@ -666,9 +697,7 @@ impl Default for ExtendedRigAgentService {
     fn default() -> Self {
         // Use block_on for async new in Default
         tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(async {
-                Self::new().await.unwrap()
-            })
+            tokio::runtime::Handle::current().block_on(async { Self::new().await.unwrap() })
         })
     }
 }
@@ -681,3 +710,4 @@ impl std::ops::Deref for ExtendedRigAgentService {
         &self.base_service
     }
 }
+

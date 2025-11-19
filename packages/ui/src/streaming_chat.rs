@@ -1,6 +1,5 @@
 // Enhanced Streaming Chat Components
 use dioxus::prelude::*;
-use futures::StreamExt;
 use api::{EnhancedStreamChunk, ChunkType, StreamMetadata, ChatMessage, Role};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -36,14 +35,12 @@ pub fn StreamingChatContainer(
 
     // Auto-scroll when new messages arrive
     use_effect(move || {
-        if let Some(element) = scroll_area_ref.get() {
-            use web_sys::HtmlElement;
-            if let Some(html_element) = element.dyn_ref::<HtmlElement>() {
-                html_element.scroll_into_view_with_scroll_into_view_options(
-                    &web_sys::ScrollIntoViewOptions::new().block(web_sys::ScrollLogicalPosition::End)
-                );
-            }
-        }
+        // Note: Auto-scroll functionality requires web integration
+        // For now, this is a placeholder for scroll behavior
+        // In a full implementation with web support, we would use:
+        // - web_sys::HtmlElement for DOM manipulation
+        // - scroll_into_view_with_scroll_into_view_options
+        // For desktop/mobile, different scrolling approaches would be used
     });
 
     rsx! {

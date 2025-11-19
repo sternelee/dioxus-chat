@@ -7,10 +7,10 @@ use std::pin::Pin;
 use std::time::Duration;
 use tokio::time::sleep;
 
-use crate::rig_agent_service::RigAgentService;
 use crate::chat_service_simple::{
-    ChatRequest, ChatResponse, StreamChunk, ChatMessage, Role, TokenUsage,
+    ChatMessage, ChatRequest, ChatResponse, Role, StreamChunk, TokenUsage,
 };
+use crate::rig_agent_service::RigAgentService;
 
 /// Streaming configuration
 #[derive(Debug, Clone)]
@@ -113,7 +113,8 @@ impl StreamingAgentService {
         };
 
         // Extract content and metadata
-        let content = full_response.message
+        let content = full_response
+            .message
             .as_ref()
             .map(|msg| msg.content.clone())
             .unwrap_or_default();
@@ -121,14 +122,16 @@ impl StreamingAgentService {
         let thinking_content = full_response.thinking_content.clone();
 
         // Create streaming chunks
-        let chunks = self.create_enhanced_chunks(
-            content,
-            thinking_content,
-            agent_name,
-            agent_mode,
-            model_id,
-            full_response.token_usage,
-        ).await;
+        let chunks = self
+            .create_enhanced_chunks(
+                content,
+                thinking_content,
+                agent_name,
+                agent_mode,
+                model_id,
+                full_response.token_usage,
+            )
+            .await;
 
         Ok(Box::pin(futures::stream::iter(chunks)))
     }
@@ -140,52 +143,68 @@ impl StreamingAgentService {
     ) -> Result<impl Stream<Item = String>> {
         let stream = self.stream_chat_response(request).await?;
 
-        let sse_stream = stream.map(|chunk| {
-            match chunk.chunk_type {
-                ChunkType::Content => {
-                    format!("data: {}\n\n", serde_json::json!({
+        let sse_stream = stream.map(|chunk| match chunk.chunk_type {
+            ChunkType::Content => {
+                format!(
+                    "data: {}\n\n",
+                    serde_json::json!({
                         "type": "content",
                         "content": chunk.base.content,
                         "delta": chunk.base.delta,
                         "finish_reason": chunk.base.finish_reason,
                         "is_complete": chunk.base.is_complete,
                         "metadata": chunk.metadata
-                    }))
-                },
-                ChunkType::Thinking => {
-                    format!("data: {}\n\n", serde_json::json!({
+                    })
+                )
+            }
+            ChunkType::Thinking => {
+                format!(
+                    "data: {}\n\n",
+                    serde_json::json!({
                         "type": "thinking",
                         "content": chunk.base.content,
                         "metadata": chunk.metadata
-                    }))
-                },
-                ChunkType::ToolCall => {
-                    format!("data: {}\n\n", serde_json::json!({
+                    })
+                )
+            }
+            ChunkType::ToolCall => {
+                format!(
+                    "data: {}\n\n",
+                    serde_json::json!({
                         "type": "tool_call",
                         "content": chunk.base.content,
                         "metadata": chunk.metadata
-                    }))
-                },
-                ChunkType::ToolResult => {
-                    format!("data: {}\n\n", serde_json::json!({
+                    })
+                )
+            }
+            ChunkType::ToolResult => {
+                format!(
+                    "data: {}\n\n",
+                    serde_json::json!({
                         "type": "tool_result",
                         "content": chunk.base.content,
                         "metadata": chunk.metadata
-                    }))
-                },
-                ChunkType::Metadata => {
-                    format!("data: {}\n\n", serde_json::json!({
+                    })
+                )
+            }
+            ChunkType::Metadata => {
+                format!(
+                    "data: {}\n\n",
+                    serde_json::json!({
                         "type": "metadata",
                         "metadata": chunk.metadata
-                    }))
-                },
-                ChunkType::Error => {
-                    format!("data: {}\n\n", serde_json::json!({
+                    })
+                )
+            }
+            ChunkType::Error => {
+                format!(
+                    "data: {}\n\n",
+                    serde_json::json!({
                         "type": "error",
                         "content": chunk.base.content,
                         "metadata": chunk.metadata
-                    }))
-                }
+                    })
+                )
             }
         });
 
@@ -205,7 +224,10 @@ impl StreamingAgentService {
 
         chunks.push(EnhancedStreamChunk {
             base: StreamChunk {
-                content: Some(format!("Starting {} agent in {} mode", agent_name, agent_mode)),
+                content: Some(format!(
+                    "Starting {} agent in {} mode",
+                    agent_name, agent_mode
+                )),
                 delta: None,
                 token_usage: None,
                 model: request.model.clone(),
@@ -223,7 +245,8 @@ impl StreamingAgentService {
 
         // If tools are available, add tool information
         if request.tools.as_ref().map_or(false, |t| !t.is_empty()) {
-            let tool_names: Vec<String> = request.tools
+            let tool_names: Vec<String> = request
+                .tools
                 .as_ref()
                 .unwrap_or(&vec![])
                 .iter()
@@ -273,9 +296,8 @@ impl StreamingAgentService {
         // Add thinking chunks if available and enabled
         if let Some(ref thinking) = thinking_content {
             if self.config.enable_thinking_stream {
-                let thinking_words: Vec<String> = thinking.split_whitespace()
-                    .map(|s| s.to_string())
-                    .collect();
+                let thinking_words: Vec<String> =
+                    thinking.split_whitespace().map(|s| s.to_string()).collect();
 
                 for (i, word) in thinking_words.iter().enumerate() {
                     let is_complete_thinking = i == thinking_words.len() - 1;
@@ -320,9 +342,7 @@ impl StreamingAgentService {
         }
 
         // Split content into chunks for streaming
-        let words: Vec<String> = content.split_whitespace()
-            .map(|s| s.to_string())
-            .collect();
+        let words: Vec<String> = content.split_whitespace().map(|s| s.to_string()).collect();
         let words_len = words.len();
 
         for (index, word) in words.into_iter().enumerate() {
@@ -333,9 +353,17 @@ impl StreamingAgentService {
                 base: StreamChunk {
                     content: Some(format!("{} ", word)),
                     delta: Some(format!("{} ", word)),
-                    token_usage: if is_complete { token_usage.clone() } else { None },
+                    token_usage: if is_complete {
+                        token_usage.clone()
+                    } else {
+                        None
+                    },
                     model: model_id.clone(),
-                    finish_reason: if is_complete { Some("stop".to_string()) } else { None },
+                    finish_reason: if is_complete {
+                        Some("stop".to_string())
+                    } else {
+                        None
+                    },
                     is_complete,
                 },
                 chunk_type: ChunkType::Content,
@@ -389,16 +417,20 @@ impl StreamingAgentService {
         &self,
         request: ChatRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = EnhancedStreamChunk> + Send>>> {
-        let chunks = self.create_enhanced_chunks(
-            "Response will be streamed with delay".to_string(),
-            None,
-            self.get_agent_name(&request),
-            self.get_agent_mode(&request),
-            request.model.clone(),
-            None,
-        ).await;
+        let chunks = self
+            .create_enhanced_chunks(
+                "Response will be streamed with delay".to_string(),
+                None,
+                self.get_agent_name(&request),
+                self.get_agent_mode(&request),
+                request.model.clone(),
+                None,
+            )
+            .await;
 
-        Ok(Box::pin(Self::create_delayed_stream(chunks, self.config.chunk_delay_ms).await))
+        Ok(Box::pin(
+            Self::create_delayed_stream(chunks, self.config.chunk_delay_ms).await,
+        ))
     }
 }
 
@@ -410,3 +442,4 @@ impl Clone for StreamingAgentService {
         }
     }
 }
+

@@ -1,12 +1,12 @@
 // Rig-based Agent Service implementation (Temporarily using mock implementation)
 use anyhow::Result;
 use chrono::Utc;
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use futures::{Stream, StreamExt};
+use serde::{Deserialize, Serialize};
+use serde_json::json;
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use serde_json::json;
 
 // Temporarily mock rig types for compilation
 #[async_trait::async_trait]
@@ -41,8 +41,8 @@ impl MockAgent for MockAgentImpl {
 // Re-export types from chat_service_simple for compatibility
 pub use crate::chat_service_simple::{
     AgentConfig, ChatMessage, ChatRequest, ChatResponse, GooseMode, Message, MessageContent,
-    MessageMetadata, ModelConfig, Role, TokenUsage, Tool, ToolCall, ToolResult, StreamChunk,
-    ModelPricing, ProviderError,
+    MessageMetadata, ModelConfig, ModelPricing, ProviderError, Role, StreamChunk, TokenUsage, Tool,
+    ToolCall, ToolResult,
 };
 
 /// Enhanced model configuration with rig provider integration
@@ -97,7 +97,8 @@ impl CustomTool for WeatherTool {
     }
 
     async fn call(&self, args: serde_json::Value) -> Result<String> {
-        let location = args.get("location")
+        let location = args
+            .get("location")
             .and_then(|v| v.as_str())
             .unwrap_or("unknown location");
         // Mock weather data
@@ -166,7 +167,9 @@ impl RigAgentService {
                     id: "deepseek-chat".to_string(),
                     name: "DeepSeek Chat".to_string(),
                     provider: "deepseek".to_string(),
-                    description: Some("DeepSeek's chat model optimized for conversations".to_string()),
+                    description: Some(
+                        "DeepSeek's chat model optimized for conversations".to_string(),
+                    ),
                     context_limit: Some(64000),
                     supports_tools: true,
                     supports_streaming: true,
@@ -236,10 +239,15 @@ impl RigAgentService {
             request.model.clone()
         };
 
-        let agent_key = format!("{}:{}:{}",
+        let agent_key = format!(
+            "{}:{}:{}",
             model_id,
             request.system_prompt.as_deref().unwrap_or(""),
-            request.agent_config.as_ref().map(|c| format!("{:?}", c.goose_mode)).unwrap_or_default()
+            request
+                .agent_config
+                .as_ref()
+                .map(|c| format!("{:?}", c.goose_mode))
+                .unwrap_or_default()
         );
 
         // Check if agent already exists
@@ -251,50 +259,58 @@ impl RigAgentService {
         }
 
         // Create new agent based on model
-        let model_config = self.models.get(&model_id)
+        let model_config = self
+            .models
+            .get(&model_id)
             .ok_or_else(|| anyhow::anyhow!("Model {} not found", model_id))?;
 
-        let agent: Box<dyn MockAgent> =
-            match model_config.rig_provider.as_str() {
-                "openai" | "anthropic" | "deepseek" => {
-                    // For now, create a mock agent that simulates these providers
-                    let mut builder = MockAgentBuilder::new(&model_config.rig_model_id);
+        let agent: Box<dyn MockAgent> = match model_config.rig_provider.as_str() {
+            "openai" | "anthropic" | "deepseek" => {
+                // For now, create a mock agent that simulates these providers
+                let mut builder = MockAgentBuilder::new(&model_config.rig_model_id);
 
-                    // Add system prompt if provided
-                    if let Some(ref prompt) = request.system_prompt {
-                        builder = builder.preamble(prompt);
-                    }
+                // Add system prompt if provided
+                if let Some(ref prompt) = request.system_prompt {
+                    builder = builder.preamble(prompt);
+                }
 
-                    // Add tools if supported and requested
-                    if model_config.supports_tools && request.tools.as_ref().map_or(true, |t| !t.is_empty()) {
-                        builder = builder.tool(DateTimeTool).tool(WeatherTool);
-                    }
+                // Add tools if supported and requested
+                if model_config.supports_tools
+                    && request.tools.as_ref().map_or(true, |t| !t.is_empty())
+                {
+                    builder = builder.tool(DateTimeTool).tool(WeatherTool);
+                }
 
-                    // Configure agent settings
-                    if let Some(ref agent_config) = request.agent_config {
-                        match agent_config.goose_mode {
-                            GooseMode::Agent => {
-                                builder = builder.preamble("You are a helpful AI assistant with access to tools. Use the tools when they are helpful for answering the user's request.");
-                            },
-                            GooseMode::Chat => {
-                                builder = builder.preamble("You are a helpful AI assistant focused on natural conversation.");
-                            },
-                            GooseMode::Auto => {
-                                builder = builder.preamble("You are an autonomous AI assistant. Proactively help the user and use tools as needed.");
-                            },
+                // Configure agent settings
+                if let Some(ref agent_config) = request.agent_config {
+                    match agent_config.goose_mode {
+                        GooseMode::Agent => {
+                            builder = builder.preamble("You are a helpful AI assistant with access to tools. Use the tools when they are helpful for answering the user's request.");
+                        }
+                        GooseMode::Chat => {
+                            builder = builder.preamble(
+                                "You are a helpful AI assistant focused on natural conversation.",
+                            );
+                        }
+                        GooseMode::Auto => {
+                            builder = builder.preamble("You are an autonomous AI assistant. Proactively help the user and use tools as needed.");
                         }
                     }
-
-                    builder.build()
-                },
-                "mock" => {
-                    // Create a mock agent for testing
-                    MockAgentBuilder::new(&model_id).build()
-                },
-                _ => {
-                    return Err(anyhow::anyhow!("Provider {} not yet implemented", model_config.rig_provider));
                 }
-            };
+
+                builder.build()
+            }
+            "mock" => {
+                // Create a mock agent for testing
+                MockAgentBuilder::new(&model_id).build()
+            }
+            _ => {
+                return Err(anyhow::anyhow!(
+                    "Provider {} not yet implemented",
+                    model_config.rig_provider
+                ));
+            }
+        };
 
         // Store the agent
         {
@@ -305,7 +321,6 @@ impl RigAgentService {
         Ok(agent_key)
     }
 
-  
     pub async fn send_message(&self, request: ChatRequest) -> Result<ChatResponse> {
         let agent_key = self.create_or_get_agent(&request).await?;
 
@@ -319,7 +334,8 @@ impl RigAgentService {
             .unwrap_or_default();
 
         let agents = self.agents.read().await;
-        let agent = agents.get(&agent_key)
+        let agent = agents
+            .get(&agent_key)
             .ok_or_else(|| anyhow::anyhow!("Agent not found"))?;
 
         // Use rig agent to generate response
@@ -352,7 +368,10 @@ impl RigAgentService {
         })
     }
 
-    pub async fn send_message_stream(&self, request: ChatRequest) -> Result<impl Stream<Item = StreamChunk>> {
+    pub async fn send_message_stream(
+        &self,
+        request: ChatRequest,
+    ) -> Result<impl Stream<Item = StreamChunk>> {
         let agent_key = self.create_or_get_agent(&request).await?;
 
         // Get the last user message
@@ -365,7 +384,8 @@ impl RigAgentService {
             .unwrap_or_default();
 
         let agents = self.agents.read().await;
-        let agent = agents.get(&agent_key)
+        let agent = agents
+            .get(&agent_key)
             .ok_or_else(|| anyhow::anyhow!("Agent not found"))?;
 
         // Create a streaming response
@@ -376,26 +396,34 @@ impl RigAgentService {
         match agent.prompt(&user_message).await {
             Ok(response) => {
                 response_text = response;
-            },
+            }
             Err(e) => return Err(anyhow::anyhow!("Failed to generate response: {}", e)),
         }
 
-        let words: Vec<String> = response_text.split_whitespace().map(|s| s.to_string()).collect();
+        let words: Vec<String> = response_text
+            .split_whitespace()
+            .map(|s| s.to_string())
+            .collect();
         let words_len = words.len();
         let model_id_clone = model_id;
 
-        Ok(futures::stream::iter(words.into_iter().enumerate())
-            .map(move |(index, word)| {
+        Ok(
+            futures::stream::iter(words.into_iter().enumerate()).map(move |(index, word)| {
                 let is_complete = index == words_len - 1;
                 StreamChunk {
                     content: Some(format!("{} ", word)),
                     delta: Some(format!("{} ", word)),
                     token_usage: None,
                     model: model_id_clone.clone(),
-                    finish_reason: if is_complete { Some("stop".to_string()) } else { None },
+                    finish_reason: if is_complete {
+                        Some("stop".to_string())
+                    } else {
+                        None
+                    },
                     is_complete,
                 }
-            }))
+            }),
+        )
     }
 
     pub async fn list_tools(&self, model: &str) -> Vec<Tool> {
@@ -435,12 +463,13 @@ impl RigAgentService {
     }
 
     /// Send a message with streaming response using Server-Sent Events format
-    pub async fn send_message_sse(&self, request: ChatRequest) -> Result<impl Stream<Item = String>> {
+    pub async fn send_message_sse(
+        &self,
+        request: ChatRequest,
+    ) -> Result<impl Stream<Item = String>> {
         let stream = self.send_message_stream(request).await?;
 
-        let sse_stream = stream.map(|chunk| {
-            serde_json::to_string(&chunk).unwrap_or_default()
-        });
+        let sse_stream = stream.map(|chunk| serde_json::to_string(&chunk).unwrap_or_default());
 
         Ok(sse_stream)
     }
@@ -452,3 +481,4 @@ impl Default for RigAgentService {
         Self::new().expect("Failed to create RigAgentService")
     }
 }
+

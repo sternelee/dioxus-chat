@@ -6944,8 +6944,11 @@ name = "ui"
 version = "0.1.0"
 dependencies = [
  "api",
+ "chrono",
  "dioxus",
  "dioxus-primitives",
+ "futures",
+ "serde",
  "serde_json",
  "tokio",
  "uuid",

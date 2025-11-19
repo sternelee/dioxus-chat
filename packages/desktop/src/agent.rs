@@ -7,11 +7,9 @@ use tokio::sync::RwLock;
 
 // Re-export from API module with rig integration
 pub use api::{
-    ChatMessage, ChatRequest, ChatResponse, Role, TokenUsage,
-    Tool, ToolCall, ToolResult, MessageMetadata,
-    AgentConfig, GooseMode, ModelConfig,
-    RigAgentService, AgentFactory, StreamingAgentService,
-    EnhancedStreamChunk, ChunkType, StreamMetadata,
+    AgentConfig, AgentFactory, ChatMessage, ChatRequest, ChatResponse, ChunkType,
+    EnhancedStreamChunk, GooseMode, MessageMetadata, ModelConfig, RigAgentService, Role,
+    StreamMetadata, StreamingAgentService, TokenUsage, Tool, ToolCall, ToolResult,
 };
 
 // Simplified MessageContent for UI usage
@@ -221,10 +219,7 @@ pub struct GooseAgent {
 }
 
 impl GooseAgent {
-    pub fn new(
-        config: AgentConfig,
-        rig_service: RigAgentService,
-    ) -> Self {
+    pub fn new(config: AgentConfig, rig_service: RigAgentService) -> Self {
         let streaming_service = StreamingAgentService::new(rig_service.clone());
         Self {
             config,
@@ -301,8 +296,10 @@ impl Agent for GooseAgent {
         }
 
         // Convert UiChatMessage to ChatMessage for rig service
-        let chat_messages: Vec<ChatMessage> = conversation.messages.into_iter().map(|msg| {
-            ChatMessage {
+        let chat_messages: Vec<ChatMessage> = conversation
+            .messages
+            .into_iter()
+            .map(|msg| ChatMessage {
                 role: msg.role,
                 content: match msg.content {
                     MessageContent::Text(text) => text,
@@ -311,13 +308,17 @@ impl Agent for GooseAgent {
                 timestamp: msg.timestamp,
                 tool_calls: msg.tool_calls,
                 tool_results: msg.tool_results,
-            }
-        }).collect();
+            })
+            .collect();
 
         // Create chat request with rig agent configuration
         let mut request = ChatRequest {
             messages: chat_messages,
-            model: conversation.metadata.model.clone().unwrap_or_else(|| "mock-local".to_string()),
+            model: conversation
+                .metadata
+                .model
+                .clone()
+                .unwrap_or_else(|| "mock-local".to_string()),
             stream: true,
             max_tokens: Some(self.config.max_tokens.unwrap_or(2048)),
             temperature: self.config.temperature,
@@ -439,7 +440,11 @@ impl Agent for GooseAgent {
     }
 
     async fn remove_extension(&mut self, name: &str) -> Result<()> {
-        self.extensions.write().await.remove(name).is_some()
+        self.extensions
+            .write()
+            .await
+            .remove(name)
+            .is_some()
             .then_some(())
             .ok_or_else(|| anyhow::anyhow!("Extension '{}' not found", name))
     }
@@ -457,8 +462,10 @@ impl Agent for GooseAgent {
         system_prompt: Option<&str>,
     ) -> Result<Box<dyn futures::Stream<Item = Result<EnhancedStreamChunk>> + Send + Unpin>> {
         // Convert UiChatMessage to ChatMessage for rig service
-        let chat_messages: Vec<ChatMessage> = conversation.messages.into_iter().map(|msg| {
-            ChatMessage {
+        let chat_messages: Vec<ChatMessage> = conversation
+            .messages
+            .into_iter()
+            .map(|msg| ChatMessage {
                 role: msg.role,
                 content: match msg.content {
                     MessageContent::Text(text) => text,
@@ -467,12 +474,16 @@ impl Agent for GooseAgent {
                 timestamp: msg.timestamp,
                 tool_calls: msg.tool_calls,
                 tool_results: msg.tool_results,
-            }
-        }).collect();
+            })
+            .collect();
 
         let request = ChatRequest {
             messages: chat_messages,
-            model: conversation.metadata.model.clone().unwrap_or_else(|| "mock-local".to_string()),
+            model: conversation
+                .metadata
+                .model
+                .clone()
+                .unwrap_or_else(|| "mock-local".to_string()),
             stream: true,
             max_tokens: Some(self.config.max_tokens.unwrap_or(2048)),
             temperature: self.config.temperature,
@@ -497,7 +508,9 @@ impl Agent for GooseAgent {
         };
 
         // Use streaming service for enhanced features
-        Ok(Box::pin(self.streaming_service.stream_chat_response(request).await))
+        Ok(Box::pin(
+            self.streaming_service.stream_chat_response(request).await,
+        ))
     }
 }
 
@@ -611,3 +624,4 @@ impl AgentFactory {
         Ok(Box::new(GooseAgent::new(config, rig_service)))
     }
 }
+
