@@ -20,3 +20,13 @@ pub use echo::Echo;
 // Re-export Model from model_selector for SimpleModelSelector
 mod model_selector;
 pub use model_selector::Model;
+
+// New Rig Agent UI Components
+mod agent_config;
+pub use agent_config::{AgentConfigPanel, ToolManager, AgentStatus, AgentConfigState};
+
+// Streaming Chat Components
+mod streaming_chat;
+pub use streaming_chat::{
+    StreamingChatContainer, StreamingControls, StreamingMessage, StreamingState,
+};

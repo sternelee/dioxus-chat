@@ -1,19 +1,51 @@
 //! This crate contains all shared fullstack server functions.
 use dioxus::prelude::*;
 
-// Only include the simplified chat service for now
+// Include chat service modules
 pub mod chat_service_simple;
+pub mod rig_agent_service;
+pub mod agent_builder;
+pub mod streaming_service;
 
-// Export only the essential types from chat_service module
+// Temporarily comment out advanced modules that have compilation issues
+// pub mod mcp_tools;
+// pub mod multimodal;
+// pub mod agent_extensions;
+// pub mod rag_system;
+
+// Export types from chat_service_simple for backward compatibility
 pub use chat_service_simple::{
-    SimpleChatService as ChatService, ChatRequest, ChatResponse, ChatMessage, ModelConfig, Role, TokenUsage,
-    AgentConfig, GooseMode, Message, MessageContent, MessageMetadata, Tool, ToolCall, ToolResult,
+    AgentConfig, ChatMessage, ChatRequest, ChatResponse, GooseMode, Message, MessageContent,
+    MessageMetadata, ModelConfig, Role, SimpleChatService as ChatService, TokenUsage, Tool,
+    ToolCall, ToolResult, StreamChunk, ModelPricing, ProviderError,
 };
 
+// Export new rig-based agent services
+pub use rig_agent_service::{RigAgentService, RigModelConfig, CustomTool};
+pub use agent_builder::{RigAgentBuilder, AgentBuilderConfig, AgentFactory, ToolRegistry};
+pub use streaming_service::{StreamingAgentService, StreamingConfig, EnhancedStreamChunk, ChunkType, StreamMetadata};
+
+// Temporarily comment out advanced feature exports to focus on core functionality
+// pub use mcp_tools::{McpToolRegistry, McpServerConfig, McpClient, EnhancedRigAgentService as MCPEnabledAgentService};
+// pub use multimodal::{
+//     MultimodalService, MediaContent, MediaData, MediaType, MultimodalMessage, MultimodalConfig,
+//     MultimodalChatRequest, MultimodalRigAgentService, VisionAnalysisTool, SpeechToTextTool, DocumentProcessorTool
+// };
+// pub use agent_extensions::{
+//     AgentExtension, ExtensionManager, ExtensionContext, ExtensionResult, ExtensionPhase,
+//     ExtensionInfo, ExtendedRigAgentService, ConversationSummarizerExtension, ToolUsageMonitorExtension,
+//     SafetyFilterExtension
+// };
+// pub use rag_system::{
+//     VectorStore, VectorEmbedding, DocumentMetadata, SearchQuery, SearchResult,
+//     DocumentChunk, InMemoryVectorStore, EmbeddingService, DocumentProcessor, MockEmbeddingService,
+//     RAGSystem, RAGApiTool as RAGTool, KnowledgeBaseApiTool as KnowledgeBaseTool, RAGStatistics, RAGEnabledAgentService
+// };
+
 // Core traits for extensibility
+use anyhow::Result;
 use async_trait::async_trait;
 use futures::Stream;
-use anyhow::Result;
 use std::sync::Arc;
 
 /// Provider trait for different AI providers
@@ -53,9 +85,9 @@ pub trait ChatProvider: Send + Sync {
 #[async_trait]
 impl ChatProvider for ChatService {
     async fn send_message_stream(&self, request: ChatRequest) -> Result<String> {
-        self.send_message(request).await.map(|response| {
-            serde_json::to_string(&response).unwrap_or_default()
-        })
+        self.send_message(request)
+            .await
+            .map(|response| serde_json::to_string(&response).unwrap_or_default())
     }
 
     async fn list_models(&self) -> Result<Vec<ModelConfig>> {
@@ -71,7 +103,12 @@ impl ChatProvider for ChatService {
     }
 
     fn capabilities(&self) -> Vec<String> {
-        vec!["chat".to_string(), "streaming".to_string(), "thinking".to_string(), "tools".to_string()]
+        vec![
+            "chat".to_string(),
+            "streaming".to_string(),
+            "thinking".to_string(),
+            "tools".to_string(),
+        ]
     }
 }
 
@@ -121,21 +158,16 @@ pub async fn echo(input: String) -> Result<String, ServerFnError> {
 /// Get available models from all registered providers
 #[post("/api/models")]
 pub async fn get_available_models() -> Result<Vec<ModelConfig>, ServerFnError> {
-    let service = ChatService::new()
-        .map_err(|e| ServerFnError::new(format!("Failed to create chat service: {}", e)))?;
-    let models = service
-        .get_available_models()
-        .into_iter()
-        .cloned()
-        .collect();
-    Ok(models)
+    let service = RigAgentService::new()
+        .map_err(|e| ServerFnError::new(format!("Failed to create rig agent service: {}", e)))?;
+    Ok(service.get_available_models())
 }
 
-/// Send a chat message (streaming chat response)
+/// Send a chat message (using rig agent service)
 #[post("/api/chat")]
 pub async fn send_message(request: ChatRequest) -> Result<ChatResponse, ServerFnError> {
-    let service = ChatService::new()
-        .map_err(|e| ServerFnError::new(format!("Failed to create chat service: {}", e)))?;
+    let service = RigAgentService::new()
+        .map_err(|e| ServerFnError::new(format!("Failed to create rig agent service: {}", e)))?;
     let response = service
         .send_message(request)
         .await
@@ -143,14 +175,17 @@ pub async fn send_message(request: ChatRequest) -> Result<ChatResponse, ServerFn
     Ok(response)
 }
 
-/// Send a chat message with streaming response using Server-Sent Events
+/// Send a chat message with streaming response using enhanced streaming service
 #[post("/api/chat/stream")]
 pub async fn send_message_stream(request: ChatRequest) -> Result<String, ServerFnError> {
-    let service = ChatService::new()
-        .map_err(|e| ServerFnError::new(format!("Failed to create chat service: {}", e)))?;
+    let agent_service = RigAgentService::new()
+        .map_err(|e| ServerFnError::new(format!("Failed to create rig agent service: {}", e)))?;
+    let streaming_service = StreamingAgentService::new(agent_service);
 
-    // Create a stream for real-time updates
-    let stream = service.send_message_stream(request).await
+    // Create a stream for real-time updates using enhanced streaming
+    let stream = streaming_service
+        .stream_chat_response(request)
+        .await
         .map_err(|e| ServerFnError::new(format!("Failed to create stream: {}", e)))?;
 
     // For now, collect the stream and return the complete response
@@ -164,14 +199,14 @@ pub async fn send_message_stream(request: ChatRequest) -> Result<String, ServerF
     let mut finish_reason = None;
 
     for chunk in chunks {
-        if let Some(content) = chunk.content {
+        if let Some(content) = chunk.base.content {
             full_content.push_str(&content);
         }
-        if chunk.token_usage.is_some() {
-            final_usage = chunk.token_usage;
+        if chunk.base.token_usage.is_some() {
+            final_usage = chunk.base.token_usage;
         }
-        if chunk.finish_reason.is_some() {
-            finish_reason = chunk.finish_reason;
+        if chunk.base.finish_reason.is_some() {
+            finish_reason = chunk.base.finish_reason;
         }
     }
 
@@ -190,6 +225,7 @@ pub async fn send_message_stream(request: ChatRequest) -> Result<String, ServerF
         finish_reason,
         is_streaming: false, // We've collected the full response
         reasoning_content: None,
+        thinking_content: None,
     };
 
     serde_json::to_string(&response)
@@ -199,10 +235,85 @@ pub async fn send_message_stream(request: ChatRequest) -> Result<String, ServerF
 /// Get available tools for a specific model
 #[post("/api/tools")]
 pub async fn get_tools(model: String) -> Result<Vec<Tool>, ServerFnError> {
-    let service = ChatService::new()
-        .map_err(|e| ServerFnError::new(format!("Failed to create chat service: {}", e)))?;
+    let service = RigAgentService::new()
+        .map_err(|e| ServerFnError::new(format!("Failed to create rig agent service: {}", e)))?;
     let tools = service.list_tools(&model).await;
     Ok(tools)
 }
 
+// Additional API endpoints for enhanced agent functionality
 
+/// Create a specialized agent with custom configuration
+#[post("/api/agents/create")]
+pub async fn create_agent(config: AgentBuilderConfig) -> Result<String, ServerFnError> {
+    let builder = RigAgentBuilder::new(config);
+
+    // For now, just return a success message
+    // In a full implementation, this would store the agent and return an ID
+    Ok("Agent created successfully".to_string())
+}
+
+/// Get available agent types
+#[post("/api/agents/types")]
+pub async fn get_agent_types() -> Result<Vec<String>, ServerFnError> {
+    Ok(vec![
+        "conversational".to_string(),
+        "tool_agent".to_string(),
+        "autonomous".to_string(),
+        "programming".to_string(),
+        "research".to_string(),
+        "creative".to_string(),
+        "analysis".to_string(),
+    ])
+}
+
+/// Stream chat with enhanced features including tool visualization
+#[post("/api/chat/stream/enhanced")]
+pub async fn send_message_enhanced_stream(request: ChatRequest) -> Result<String, ServerFnError> {
+    let agent_service = RigAgentService::new()
+        .map_err(|e| ServerFnError::new(format!("Failed to create rig agent service: {}", e)))?;
+    let streaming_service = StreamingAgentService::new(agent_service);
+
+    // Create an enhanced stream with tool visualization
+    let stream = streaming_service
+        .stream_chat_with_tools(request)
+        .await
+        .map_err(|e| ServerFnError::new(format!("Failed to create enhanced stream: {}", e)))?;
+
+    // For now, collect the stream and return the complete response
+    use futures::StreamExt;
+    let chunks: Vec<_> = stream.collect().await;
+
+    // Combine all content chunks into a single response
+    let mut full_content = String::new();
+    let mut metadata_chunks = Vec::new();
+
+    for chunk in chunks {
+        match chunk.chunk_type {
+            ChunkType::Content | ChunkType::Thinking => {
+                if let Some(content) = chunk.base.content {
+                    full_content.push_str(&content);
+                }
+            },
+            ChunkType::Metadata => {
+                metadata_chunks.push(chunk);
+            },
+            _ => {}
+        }
+    }
+
+    // Create response including metadata
+    let response = serde_json::json!({
+        "message": {
+            "role": "assistant",
+            "content": full_content,
+            "timestamp": chrono::Utc::now(),
+        },
+        "metadata": metadata_chunks.into_iter().map(|c| c.metadata).collect::<Vec<_>>(),
+        "is_streaming": false,
+        "model": "enhanced_agent",
+    });
+
+    serde_json::to_string(&response)
+        .map_err(|e| ServerFnError::new(format!("Failed to serialize response: {}", e)))
+}

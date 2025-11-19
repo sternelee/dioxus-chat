@@ -44,7 +44,9 @@ impl StdioMcpClient {
 
     async fn send_request(&mut self, method: &str, params: Option<Value>) -> Result<Value> {
         let request_id = self.next_id();
-        let child = self.child.as_mut()
+        let child = self
+            .child
+            .as_mut()
             .ok_or_else(|| anyhow::anyhow!("Child process not started"))?;
         let request = JsonRpcRequest {
             jsonrpc: "2.0".to_string(),
@@ -54,7 +56,7 @@ impl StdioMcpClient {
         };
 
         let request_json = serde_json::to_string(&request)?;
-        
+
         // Send request to stdin
         if let Some(stdin) = child.stdin.as_mut() {
             use tokio::io::AsyncWriteExt;
@@ -69,17 +71,21 @@ impl StdioMcpClient {
         if let Some(stdout) = child.stdout.as_mut() {
             let mut reader = BufReader::new(stdout);
             let mut line = String::new();
-            
+
             match reader.read_line(&mut line).await {
                 Ok(0) => return Err(anyhow::anyhow!("EOF while reading response")),
                 Ok(_) => {
                     let response: JsonRpcResponse = serde_json::from_str(&line.trim())
                         .map_err(|e| anyhow::anyhow!("Failed to parse JSON-RPC response: {}", e))?;
-                    
+
                     if let Some(error) = response.error {
-                        return Err(anyhow::anyhow!("JSON-RPC error: {} - {}", error.code, error.message));
+                        return Err(anyhow::anyhow!(
+                            "JSON-RPC error: {} - {}",
+                            error.code,
+                            error.message
+                        ));
                     }
-                    
+
                     Ok(response.result.unwrap_or(json!(null)))
                 }
                 Err(e) => return Err(anyhow::anyhow!("Failed to read response: {}", e)),
@@ -130,11 +136,14 @@ impl McpClient for StdioMcpClient {
             },
         };
 
-        let result = self.send_request("initialize", Some(json!(init_params))).await?;
+        let result = self
+            .send_request("initialize", Some(json!(init_params)))
+            .await?;
         debug!("Initialize result: {}", result);
 
         // Send initialized notification
-        self.send_request("notifications/initialized", Some(json!({}))).await?;
+        self.send_request("notifications/initialized", Some(json!({})))
+            .await?;
 
         self.child = Some(child);
         self.ready = true;
@@ -244,7 +253,11 @@ impl McpToolExecutor {
         Ok(all_tools)
     }
 
-    pub async fn execute_tool(&mut self, tool_name: &str, arguments: Option<Value>) -> Result<Vec<String>> {
+    pub async fn execute_tool(
+        &mut self,
+        tool_name: &str,
+        arguments: Option<Value>,
+    ) -> Result<Vec<String>> {
         // Parse tool name to extract client and actual tool name
         let parts: Vec<&str> = tool_name.splitn(2, ':').collect();
         if parts.len() != 2 {
@@ -254,7 +267,9 @@ impl McpToolExecutor {
         let client_name = parts[0];
         let actual_tool_name = parts[1];
 
-        let client = self.clients.get_mut(client_name)
+        let client = self
+            .clients
+            .get_mut(client_name)
             .ok_or_else(|| anyhow::anyhow!("MCP client not found: {}", client_name))?;
 
         if !client.is_ready() {
@@ -279,7 +294,10 @@ impl McpToolExecutor {
         }
 
         if result.is_error.unwrap_or(false) {
-            Err(anyhow::anyhow!("Tool execution failed: {}", outputs.join("\n")))
+            Err(anyhow::anyhow!(
+                "Tool execution failed: {}",
+                outputs.join("\n")
+            ))
         } else {
             Ok(outputs)
         }
@@ -293,14 +311,22 @@ impl McpToolExecutor {
             .collect()
     }
 
-    pub async fn execute_tool_calls(&mut self, tool_calls: &[crate::chat_service::ToolCall]) -> Vec<crate::chat_service::ToolResult> {
+    pub async fn execute_tool_calls(
+        &mut self,
+        tool_calls: &[crate::chat_service::ToolCall],
+    ) -> Vec<crate::chat_service::ToolResult> {
         let mut results = Vec::new();
 
         for tool_call in tool_calls {
-            let result = match self.execute_tool(&tool_call.name, Some(tool_call.arguments.clone())).await {
+            let result = match self
+                .execute_tool(&tool_call.name, Some(tool_call.arguments.clone()))
+                .await
+            {
                 Ok(outputs) => crate::chat_service::ToolResult {
                     tool_call_id: tool_call.id.clone(),
-                    result: serde_json::to_value(outputs.join("\n")).unwrap_or(serde_json::Value::String("Tool executed successfully".to_string())),
+                    result: serde_json::to_value(outputs.join("\n")).unwrap_or(
+                        serde_json::Value::String("Tool executed successfully".to_string()),
+                    ),
                     error: None,
                 },
                 Err(e) => crate::chat_service::ToolResult {
@@ -317,14 +343,15 @@ impl McpToolExecutor {
 
     pub async fn list_available_tools(&mut self) -> Vec<crate::chat_service::Tool> {
         match self.list_all_tools().await {
-            Ok(chat_tools) => {
-                chat_tools.into_iter().map(|ct| crate::chat_service::Tool {
+            Ok(chat_tools) => chat_tools
+                .into_iter()
+                .map(|ct| crate::chat_service::Tool {
                     name: ct.name,
                     description: ct.description,
                     input_schema: ct.input_schema,
                     is_mcp: true,
-                }).collect()
-            },
+                })
+                .collect(),
             Err(_) => vec![],
         }
     }
@@ -335,3 +362,4 @@ impl Default for McpToolExecutor {
         Self::new()
     }
 }
+

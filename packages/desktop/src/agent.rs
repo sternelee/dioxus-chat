@@ -5,11 +5,13 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-// Re-export from API module
+// Re-export from API module with rig integration
 pub use api::{
     ChatMessage, ChatRequest, ChatResponse, Role, TokenUsage,
     Tool, ToolCall, ToolResult, MessageMetadata,
     AgentConfig, GooseMode, ModelConfig,
+    RigAgentService, AgentFactory, StreamingAgentService,
+    EnhancedStreamChunk, ChunkType, StreamMetadata,
 };
 
 // Simplified MessageContent for UI usage
@@ -133,7 +135,7 @@ impl Conversation {
     }
 }
 
-/// Core Agent trait for extensibility
+/// Core Agent trait for extensibility with rig integration
 #[async_trait]
 pub trait Agent: Send + Sync {
     /// Process a conversation and return a stream of events
@@ -158,6 +160,16 @@ pub trait Agent: Send + Sync {
 
     /// Remove an extension from the agent
     async fn remove_extension(&mut self, name: &str) -> Result<()>;
+
+    /// Get available tools for this agent
+    async fn get_available_tools(&self) -> Result<Vec<Tool>>;
+
+    /// Enable streaming enhanced response
+    async fn stream_with_enhanced_features(
+        &self,
+        conversation: Conversation,
+        system_prompt: Option<&str>,
+    ) -> Result<Box<dyn futures::Stream<Item = Result<EnhancedStreamChunk>> + Send + Unpin>>;
 }
 
 /// Agent extension trait for plugins
@@ -199,10 +211,11 @@ pub struct ExtensionContext {
     pub metadata: HashMap<String, String>,
 }
 
-/// Main Agent implementation
+/// Main Agent implementation with rig integration
 pub struct GooseAgent {
     config: AgentConfig,
-    provider: Arc<dyn api::ChatProvider>,
+    rig_service: RigAgentService,
+    streaming_service: StreamingAgentService,
     extensions: Arc<RwLock<HashMap<String, Box<dyn AgentExtension>>>>,
     conversation_history: Arc<RwLock<HashMap<String, Conversation>>>,
 }
@@ -210,11 +223,13 @@ pub struct GooseAgent {
 impl GooseAgent {
     pub fn new(
         config: AgentConfig,
-        provider: Arc<dyn api::ChatProvider>,
+        rig_service: RigAgentService,
     ) -> Self {
+        let streaming_service = StreamingAgentService::new(rig_service.clone());
         Self {
             config,
-            provider,
+            rig_service,
+            streaming_service,
             extensions: Arc::new(RwLock::new(HashMap::new())),
             conversation_history: Arc::new(RwLock::new(HashMap::new())),
         }
@@ -285,83 +300,118 @@ impl Agent for GooseAgent {
             }
         }
 
-        // Create chat request
-        let request = ChatRequest {
-            messages: conversation.messages.clone(),
-            model: conversation.metadata.model.clone().unwrap_or_default(),
+        // Convert UiChatMessage to ChatMessage for rig service
+        let chat_messages: Vec<ChatMessage> = conversation.messages.into_iter().map(|msg| {
+            ChatMessage {
+                role: msg.role,
+                content: match msg.content {
+                    MessageContent::Text(text) => text,
+                    _ => "".to_string(),
+                },
+                timestamp: msg.timestamp,
+                tool_calls: msg.tool_calls,
+                tool_results: msg.tool_results,
+            }
+        }).collect();
+
+        // Create chat request with rig agent configuration
+        let mut request = ChatRequest {
+            messages: chat_messages,
+            model: conversation.metadata.model.clone().unwrap_or_else(|| "mock-local".to_string()),
             stream: true,
-            max_tokens: None,
-            temperature: Some(self.config.temperature.unwrap_or(0.7)),
+            max_tokens: Some(self.config.max_tokens.unwrap_or(2048)),
+            temperature: self.config.temperature,
+            top_p: None,
+            frequency_penalty: None,
+            presence_penalty: None,
+            agent_config: Some(AgentConfig {
+                goose_mode: conversation.metadata.agent_mode.unwrap_or(GooseMode::Chat),
+                max_iterations: self.config.max_iterations,
+                require_confirmation: self.config.require_confirmation,
+                readonly_tools: self.config.readonly_tools.clone(),
+                enable_tool_inspection: self.config.enable_tool_inspection,
+                enable_auto_compact: self.config.enable_auto_compact,
+                compact_threshold: self.config.compact_threshold,
+                max_turns_without_tools: self.config.max_turns_without_tools,
+                enable_autopilot: self.config.enable_autopilot,
+                enable_extensions: self.config.enable_extensions,
+                extension_timeout: self.config.extension_timeout,
+            }),
             tools: tools.map(|t| t.to_vec()),
             system_prompt: system_prompt.map(|s| s.to_string()),
         };
 
-        // Stream response from provider
-        let provider = Arc::clone(&self.provider);
+        let rig_service = self.rig_service.clone();
         let conversation_id = conversation.id.clone();
 
         let stream = async_stream::stream! {
             // Send the user message event
-            if let Some(msg) = conversation.messages.last() {
+            if let Some(msg) = request.messages.last() {
                 if matches!(msg.role, Role::User) {
-                    yield Ok(AgentEvent::Message(msg.clone()));
+                    let ui_msg = UiChatMessage {
+                        role: msg.role.clone(),
+                        content: MessageContent::Text(msg.content.clone()),
+                        timestamp: msg.timestamp,
+                        tool_calls: msg.tool_calls.clone(),
+                        tool_results: msg.tool_results.clone(),
+                        metadata: None,
+                    };
+                    yield Ok(AgentEvent::Message(ui_msg));
                 }
             }
 
-            // Stream the response
-            match provider.send_message_stream(request).await {
-                Ok(response_json) => {
-                    match serde_json::from_str::<ChatResponse>(&response_json) {
-                        Ok(response) => {
-                            if let Some(msg) = response.message {
-                                // Send thinking content if present
-                                if let Some(ref thinking) = response.reasoning_content {
-                                    let thinking_msg = ChatMessage {
-                                        role: Role::Assistant,
-                                        content: MessageContent::Text(thinking.clone()),
-                                        timestamp: msg.timestamp.clone(),
-                                        tool_calls: None,
-                                        tool_results: None,
-                                        metadata: Some(MessageMetadata {
-                                            content_type: "thinking".to_string(),
-                                            ..Default::default()
-                                        }),
-                                    };
-                                    yield Ok(AgentEvent::Message(thinking_msg));
-                                }
+            // Stream the response using rig service
+            match rig_service.send_message(request).await {
+                Ok(response) => {
+                    // Send thinking content if present
+                    if let Some(ref thinking) = response.thinking_content {
+                        let thinking_msg = UiChatMessage {
+                            role: Role::Assistant,
+                            content: MessageContent::Thinking(thinking.clone()),
+                            timestamp: response.message.as_ref().and_then(|m| m.timestamp),
+                            tool_calls: None,
+                            tool_results: None,
+                            metadata: None,
+                        };
+                        yield Ok(AgentEvent::Message(thinking_msg));
+                    }
 
-                                // Send main message
-                                yield Ok(AgentEvent::Message(msg.clone()));
+                    // Send main message
+                    if let Some(msg) = response.message {
+                        let ui_msg = UiChatMessage {
+                            role: msg.role,
+                            content: MessageContent::Text(msg.content),
+                            timestamp: msg.timestamp,
+                            tool_calls: msg.tool_calls,
+                            tool_results: msg.tool_results,
+                            metadata: None,
+                        };
+                        yield Ok(AgentEvent::Message(ui_msg));
 
-                                // Send tool calls if present
-                                if let Some(ref tool_calls) = msg.tool_calls {
-                                    for tool_call in tool_calls {
-                                        yield Ok(AgentEvent::ToolCall(tool_call.clone()));
-                                    }
-                                }
-
-                                // Send tool results if present
-                                if let Some(ref tool_results) = msg.tool_results {
-                                    for tool_result in tool_results {
-                                        yield Ok(AgentEvent::ToolResult(tool_result.clone()));
-                                    }
-                                }
+                        // Send tool calls if present
+                        if let Some(ref tool_calls) = msg.tool_calls {
+                            for tool_call in tool_calls {
+                                yield Ok(AgentEvent::ToolCall(tool_call.clone()));
                             }
-
-                            // Send token usage if present
-                            if let Some(usage) = response.token_usage {
-                                yield Ok(AgentEvent::Token(usage));
-                            }
-
-                            yield Ok(AgentEvent::Done);
                         }
-                        Err(e) => {
-                            yield Ok(AgentEvent::Error(format!("Failed to parse response: {}", e)));
+
+                        // Send tool results if present
+                        if let Some(ref tool_results) = msg.tool_results {
+                            for tool_result in tool_results {
+                                yield Ok(AgentEvent::ToolResult(tool_result.clone()));
+                            }
                         }
                     }
+
+                    // Send token usage if present
+                    if let Some(usage) = response.token_usage {
+                        yield Ok(AgentEvent::Token(usage));
+                    }
+
+                    yield Ok(AgentEvent::Done);
                 }
                 Err(e) => {
-                    yield Ok(AgentEvent::Error(format!("Provider error: {}", e)));
+                    yield Ok(AgentEvent::Error(format!("Rig service error: {}", e)));
                 }
             }
         };
@@ -393,60 +443,171 @@ impl Agent for GooseAgent {
             .then_some(())
             .ok_or_else(|| anyhow::anyhow!("Extension '{}' not found", name))
     }
+
+    /// Get available tools for this agent
+    async fn get_available_tools(&self) -> Result<Vec<Tool>> {
+        let model_id = "mock-local"; // Use a default model for tool listing
+        Ok(self.rig_service.list_tools(model_id).await)
+    }
+
+    /// Enable streaming enhanced response
+    async fn stream_with_enhanced_features(
+        &self,
+        conversation: Conversation,
+        system_prompt: Option<&str>,
+    ) -> Result<Box<dyn futures::Stream<Item = Result<EnhancedStreamChunk>> + Send + Unpin>> {
+        // Convert UiChatMessage to ChatMessage for rig service
+        let chat_messages: Vec<ChatMessage> = conversation.messages.into_iter().map(|msg| {
+            ChatMessage {
+                role: msg.role,
+                content: match msg.content {
+                    MessageContent::Text(text) => text,
+                    _ => "".to_string(),
+                },
+                timestamp: msg.timestamp,
+                tool_calls: msg.tool_calls,
+                tool_results: msg.tool_results,
+            }
+        }).collect();
+
+        let request = ChatRequest {
+            messages: chat_messages,
+            model: conversation.metadata.model.clone().unwrap_or_else(|| "mock-local".to_string()),
+            stream: true,
+            max_tokens: Some(self.config.max_tokens.unwrap_or(2048)),
+            temperature: self.config.temperature,
+            top_p: None,
+            frequency_penalty: None,
+            presence_penalty: None,
+            agent_config: Some(AgentConfig {
+                goose_mode: conversation.metadata.agent_mode.unwrap_or(GooseMode::Chat),
+                max_iterations: self.config.max_iterations,
+                require_confirmation: self.config.require_confirmation,
+                readonly_tools: self.config.readonly_tools.clone(),
+                enable_tool_inspection: self.config.enable_tool_inspection,
+                enable_auto_compact: self.config.enable_auto_compact,
+                compact_threshold: self.config.compact_threshold,
+                max_turns_without_tools: self.config.max_turns_without_tools,
+                enable_autopilot: self.config.enable_autopilot,
+                enable_extensions: self.config.enable_extensions,
+                extension_timeout: self.config.extension_timeout,
+            }),
+            tools: None,
+            system_prompt: system_prompt.map(|s| s.to_string()),
+        };
+
+        // Use streaming service for enhanced features
+        Ok(Box::pin(self.streaming_service.stream_chat_response(request).await))
+    }
 }
 
-/// Agent factory for creating different types of agents
+/// Agent factory for creating different types of agents with rig integration
 pub struct AgentFactory;
 
 impl AgentFactory {
-    pub async fn create_default_agent(
-        provider: Arc<dyn api::ChatProvider>,
-    ) -> Result<Box<dyn Agent>> {
+    pub async fn create_default_agent() -> Result<Box<dyn Agent>> {
+        let rig_service = RigAgentService::new()?;
         let config = AgentConfig {
-            name: "Default Agent".to_string(),
-            description: "Default chat agent".to_string(),
-            version: "1.0.0".to_string(),
-            temperature: Some(0.7),
-            max_tokens: Some(2048),
-            mode: Some(GooseMode::Chat),
-            tools_enabled: true,
-            extensions_enabled: true,
+            goose_mode: GooseMode::Chat,
+            max_iterations: 10,
+            require_confirmation: false,
+            readonly_tools: vec![],
+            enable_tool_inspection: true,
+            enable_auto_compact: true,
+            compact_threshold: 0.8,
+            max_turns_without_tools: 3,
+            enable_autopilot: false,
+            enable_extensions: true,
+            extension_timeout: 30,
         };
 
-        Ok(Box::new(GooseAgent::new(config, provider)))
+        Ok(Box::new(GooseAgent::new(config, rig_service)))
     }
 
-    pub async fn create_reasoning_agent(
-        provider: Arc<dyn api::ChatProvider>,
-    ) -> Result<Box<dyn Agent>> {
+    pub async fn create_reasoning_agent() -> Result<Box<dyn Agent>> {
+        let rig_service = RigAgentService::new()?;
         let config = AgentConfig {
-            name: "Reasoning Agent".to_string(),
-            description: "Agent with enhanced reasoning capabilities".to_string(),
-            version: "1.0.0".to_string(),
-            temperature: Some(0.3),
-            max_tokens: Some(4096),
-            mode: Some(GooseMode::ChainOfThought),
-            tools_enabled: true,
-            extensions_enabled: true,
+            goose_mode: GooseMode::Agent,
+            max_iterations: 15,
+            require_confirmation: false,
+            readonly_tools: vec![],
+            enable_tool_inspection: true,
+            enable_auto_compact: true,
+            compact_threshold: 0.7,
+            max_turns_without_tools: 5,
+            enable_autopilot: false,
+            enable_extensions: true,
+            extension_timeout: 60,
         };
 
-        Ok(Box::new(GooseAgent::new(config, provider)))
+        Ok(Box::new(GooseAgent::new(config, rig_service)))
     }
 
-    pub async fn create_tool_agent(
-        provider: Arc<dyn api::ChatProvider>,
-    ) -> Result<Box<dyn Agent>> {
+    pub async fn create_tool_agent() -> Result<Box<dyn Agent>> {
+        let rig_service = RigAgentService::new()?;
         let config = AgentConfig {
-            name: "Tool Agent".to_string(),
-            description: "Agent specialized in tool usage".to_string(),
-            version: "1.0.0".to_string(),
-            temperature: Some(0.1),
-            max_tokens: Some(8192),
-            mode: Some(GooseMode::Tool),
-            tools_enabled: true,
-            extensions_enabled: true,
+            goose_mode: GooseMode::Agent,
+            max_iterations: 20,
+            require_confirmation: false,
+            readonly_tools: vec![],
+            enable_tool_inspection: true,
+            enable_auto_compact: true,
+            compact_threshold: 0.6,
+            max_turns_without_tools: 2,
+            enable_autopilot: false,
+            enable_extensions: true,
+            extension_timeout: 90,
         };
 
-        Ok(Box::new(GooseAgent::new(config, provider)))
+        Ok(Box::new(GooseAgent::new(config, rig_service)))
+    }
+
+    pub async fn create_autonomous_agent() -> Result<Box<dyn Agent>> {
+        let rig_service = RigAgentService::new()?;
+        let config = AgentConfig {
+            goose_mode: GooseMode::Auto,
+            max_iterations: 30,
+            require_confirmation: false,
+            readonly_tools: vec![],
+            enable_tool_inspection: true,
+            enable_auto_compact: true,
+            compact_threshold: 0.7,
+            max_turns_without_tools: 10,
+            enable_autopilot: true,
+            enable_extensions: true,
+            extension_timeout: 120,
+        };
+
+        Ok(Box::new(GooseAgent::new(config, rig_service)))
+    }
+
+    /// Create an agent with custom configuration
+    pub async fn create_agent_with_config(config: AgentConfig) -> Result<Box<dyn Agent>> {
+        let rig_service = RigAgentService::new()?;
+        Ok(Box::new(GooseAgent::new(config, rig_service)))
+    }
+
+    /// Create an agent for a specific model
+    pub async fn create_agent_for_model(model_id: &str, mode: GooseMode) -> Result<Box<dyn Agent>> {
+        let rig_service = RigAgentService::new()?;
+        let config = AgentConfig {
+            goose_mode: mode,
+            max_iterations: match mode {
+                GooseMode::Chat => 10,
+                GooseMode::Agent => 15,
+                GooseMode::Auto => 25,
+            },
+            require_confirmation: false,
+            readonly_tools: vec![],
+            enable_tool_inspection: true,
+            enable_auto_compact: true,
+            compact_threshold: 0.8,
+            max_turns_without_tools: 5,
+            enable_autopilot: matches!(mode, GooseMode::Auto),
+            enable_extensions: true,
+            extension_timeout: 60,
+        };
+
+        Ok(Box::new(GooseAgent::new(config, rig_service)))
     }
 }

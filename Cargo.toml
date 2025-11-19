@@ -9,7 +9,7 @@ members = [
 ]
 
 [workspace.dependencies]
-dioxus = { version = "0.7.0" }
+dioxus = { version = "0.7.1" }
 
 # workspace
 ui = { path = "packages/ui" }

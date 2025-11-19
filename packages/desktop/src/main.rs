@@ -1,12 +1,12 @@
 use dioxus::prelude::*;
 
 // Basic HTML components only - no complex UI dependencies
-use views::{Blog, Home, SimpleGoose};
+use views::{Blog, Home, SimpleGoose, RigAgentDemo};
 use views::chat_simple::SimpleChat as Chat;
 
 mod views;
 mod storage;
-// mod agent; // Temporarily disabled to avoid compilation errors
+mod agent; // Re-enabled with rig integration
 
 #[derive(Debug, Clone, Routable, PartialEq)]
 #[rustfmt::skip]
@@ -20,6 +20,8 @@ enum Route {
     Chat {},
     #[route("/goose")]
     SimpleGoose {},
+    #[route("/rig-demo")]
+    RigAgentDemo {},
 }
 
 const MAIN_CSS: Asset = asset!("/assets/main.css");
@@ -70,6 +72,11 @@ fn DesktopNavbar() -> Element {
                     to: Route::SimpleGoose {},
                     class: "text-gray-700 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-400 font-medium",
                     "Goose Chat"
+                }
+                Link {
+                    to: Route::RigAgentDemo {},
+                    class: "text-gray-700 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-400 font-medium bg-blue-100 dark:bg-blue-900 px-2 py-1 rounded",
+                    "🚀 Rig Demo"
                 }
             }
         }

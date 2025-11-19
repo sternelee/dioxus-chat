@@ -3,15 +3,15 @@ use crate::components::{
     input::Input,
 };
 use crate::{
-    left_panel::{LeftPanel, LeftPanelView},
-    thread_content::{ThreadContent, ThreadChatMessage, MessageRole, ToolCall, ToolCallStatus},
-    thread_list::Thread,
-    settings_panel::{SettingsPanel, SettingsTab, SettingsModel},
     chat_input::ChatInput,
+    left_panel::{LeftPanel, LeftPanelView},
     settings_menu::{SettingsMenu, Theme},
+    settings_panel::{SettingsModel, SettingsPanel, SettingsTab},
+    thread_content::{MessageRole, ThreadChatMessage, ThreadContent, ToolCall, ToolCallStatus},
+    thread_list::Thread,
 };
-use dioxus::prelude::*;
 use api::{AgentConfig, GooseMode};
+use dioxus::prelude::*;
 
 #[derive(Clone, PartialEq, Props)]
 pub struct ChatAppProps {
@@ -262,7 +262,11 @@ Would you like me to dive deeper into any specific aspect of building the chat a
             name: "GPT-4".to_string(),
             provider: "OpenAI".to_string(),
             description: Some("Most capable GPT-4 model".to_string()),
-            capabilities: vec!["chat".to_string(), "tools".to_string(), "vision".to_string()],
+            capabilities: vec![
+                "chat".to_string(),
+                "tools".to_string(),
+                "vision".to_string(),
+            ],
             context_limit: Some(128000),
             supports_tools: true,
             supports_streaming: true,
@@ -272,7 +276,11 @@ Would you like me to dive deeper into any specific aspect of building the chat a
             name: "Claude 3".to_string(),
             provider: "Anthropic".to_string(),
             description: Some("Advanced Claude model".to_string()),
-            capabilities: vec!["chat".to_string(), "tools".to_string(), "analysis".to_string()],
+            capabilities: vec![
+                "chat".to_string(),
+                "tools".to_string(),
+                "analysis".to_string(),
+            ],
             context_limit: Some(200000),
             supports_tools: true,
             supports_streaming: true,
@@ -308,3 +316,4 @@ Would you like me to dive deeper into any specific aspect of building the chat a
         }
     }
 }
+
